@@ -8,6 +8,11 @@ const nextConfig = {
       },
     ],
   },
+  // Disable ESLint during production builds (e.g., on Vercel) to avoid
+  // "Cannot serialize key 'parse' in parser" errors from the build environment.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;
