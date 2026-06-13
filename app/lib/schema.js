@@ -37,15 +37,17 @@ export const contactSchema = z.object({
 export const entrySchema = z
   .object({
     title: z.string().min(1, "Title is required"),
-    organization: z.string().min(1, "Organization is required"),
-    startDate: z.string().min(1, "Start date is required"),
+    organization: z.string().optional(),
+    startDate: z.string().optional(),
     endDate: z.string().optional(),
     description: z.string().min(1, "Description is required"),
     current: z.boolean().default(false),
+    link: z.string().optional(),
   })
   .refine(
     (data) => {
-      if (!data.current && !data.endDate) {
+      // If organization is provided, then endDate validation applies
+      if (data.organization && !data.current && !data.endDate) {
         return false;
       }
       return true;

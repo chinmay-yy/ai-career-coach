@@ -10,6 +10,8 @@ import {
   Loader2,
   Monitor,
   Save,
+  FileText,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import MDEditor from "@uiw/react-md-editor";
@@ -23,13 +25,16 @@ import useFetch from "@/hooks/use-fetch";
 import { useUser } from "@clerk/nextjs";
 import { entriesToMarkdown } from "@/app/lib/helper";
 import { resumeSchema } from "@/app/lib/schema";
-import html2pdf from "html2pdf.js/dist/html2pdf.min.js";
+import { RESUME_TEMPLATES } from "./resume-templates";
 
 export default function ResumeBuilder({ initialContent }) {
   const [activeTab, setActiveTab] = useState("edit");
   const [previewContent, setPreviewContent] = useState(initialContent);
   const { user } = useUser();
   const [resumeMode, setResumeMode] = useState("preview");
+  const [selectedTemplate, setSelectedTemplate] = useState("professional");
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [previewTemplateKey, setPreviewTemplateKey] = useState("professional");
 
   const {
     control,
@@ -110,11 +115,26 @@ export default function ResumeBuilder({ initialContent }) {
       .join("\n\n");
   };
 
+  const applyTemplate = (templateKey) => {
+    const template = RESUME_TEMPLATES[templateKey];
+    if (template) {
+      const formattedContent = template.formatter({
+        ...formValues,
+        user,
+      });
+      setPreviewContent(formattedContent);
+      setSelectedTemplate(templateKey);
+      setShowTemplateSelector(false);
+      toast.success(`Template "${template.name}" applied!`);
+    }
+  };
+
   const [isGenerating, setIsGenerating] = useState(false);
 
   const generatePDF = async () => {
     setIsGenerating(true);
     try {
+      const html2pdf = (await import("html2pdf.js/dist/html2pdf.min.js")).default;
       const element = document.getElementById("resume-pdf");
       const opt = {
         margin: [15, 15],
@@ -127,6 +147,7 @@ export default function ResumeBuilder({ initialContent }) {
       await html2pdf().set(opt).from(element).save();
     } catch (error) {
       console.error("PDF generation error:", error);
+      toast.error("Failed to generate PDF");
     } finally {
       setIsGenerating(false);
     }
@@ -153,6 +174,14 @@ export default function ResumeBuilder({ initialContent }) {
           Resume Builder
         </h1>
         <div className="space-x-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowTemplateSelector(!showTemplateSelector)}
+            className="hidden sm:inline-flex"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Templates
+          </Button>
           <Button
             variant="destructive"
             onClick={handleSubmit(onSubmit)}
@@ -185,6 +214,96 @@ export default function ResumeBuilder({ initialContent }) {
           </Button>
         </div>
       </div>
+
+      {showTemplateSelector && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-2xl font-bold text-gray-800">Choose Resume Template</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowTemplateSelector(false)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto flex">
+              {/* Preview Section */}
+              <div
+                className="flex-1 border-r p-6 overflow-auto"
+                data-color-mode="light"
+              >
+                <div className="mb-4">
+                  <h3 className="font-semibold text-lg mb-2 text-gray-800">
+                    {RESUME_TEMPLATES[previewTemplateKey].name} Preview
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {RESUME_TEMPLATES[previewTemplateKey].description}
+                  </p>
+                </div>
+                <div className="border rounded-lg bg-gray-50 text-gray-800 p-4">
+                  <MDEditor.Markdown
+                    source={RESUME_TEMPLATES[previewTemplateKey].preview}
+                    style={{
+                      backgroundColor: "white",
+                      padding: "20px",
+                      borderRadius: "8px",
+                      fontSize: "14px",
+                      lineHeight: "1.6",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Template Selection */}
+              <div className="w-80 p-6 overflow-auto bg-gradient-to-b text-gray-800 from-blue-50 to-indigo-50">
+                <h3 className="font-semibold mb-4">Available Templates</h3>
+                <div className="space-y-3">
+                  {Object.entries(RESUME_TEMPLATES).map(([key, template]) => (
+                    <div
+                      key={key}
+                      onClick={() => setPreviewTemplateKey(key)}
+                      className={`p-4 rounded-lg cursor-pointer transition-all border-2 ${
+                        previewTemplateKey === key
+                          ? "border-blue-500 bg-blue-100 shadow-md"
+                          : "border-gray-200 bg-white hover:border-blue-300"
+                      }`}
+                    >
+                      <div className="font-semibold text-sm text-gray-800 mb-1">
+                        {template.name}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {template.description}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-2 p-6 border-t bg-gray-50">
+              <Button
+                variant="outline"
+                onClick={() => setShowTemplateSelector(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  applyTemplate(previewTemplateKey);
+                }}
+              >
+                Apply {RESUME_TEMPLATES[previewTemplateKey].name} Template
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

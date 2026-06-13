@@ -46,19 +46,28 @@ export function EntryForm({ type, entries, onChange }) {
       endDate: "",
       description: "",
       current: false,
+      link: "",
     },
   });
 
   const current = watch("current");
 
   const handleAdd = handleValidation((data) => {
-    const formattedEntry = {
-      ...data,
-      startDate: formatDisplayDate(data.startDate),
-      endDate: data.current ? "" : formatDisplayDate(data.endDate),
-    };
-
-    onChange([...entries, formattedEntry]);
+    if (type === "Project") {
+      const formattedEntry = {
+        title: data.title,
+        description: data.description,
+        link: data.link || "",
+      };
+      onChange([...entries, formattedEntry]);
+    } else {
+      const formattedEntry = {
+        ...data,
+        startDate: formatDisplayDate(data.startDate),
+        endDate: data.current ? "" : formatDisplayDate(data.endDate),
+      };
+      onChange([...entries, formattedEntry]);
+    }
 
     reset();
     setIsAdding(false);
@@ -108,7 +117,7 @@ export function EntryForm({ type, entries, onChange }) {
           <Card key={index}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                {item.title} @ {item.organization}
+                {type === "Project" ? item.title : `${item.title} @ ${item.organization}`}
               </CardTitle>
               <Button
                 variant="outline"
@@ -120,14 +129,23 @@ export function EntryForm({ type, entries, onChange }) {
               </Button>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">
-                {item.current
-                  ? `${item.startDate} - Present`
-                  : `${item.startDate} - ${item.endDate}`}
-              </p>
+              {type !== "Project" && (
+                <p className="text-sm text-muted-foreground">
+                  {item.current
+                    ? `${item.startDate} - Present`
+                    : `${item.startDate} - ${item.endDate}`}
+                </p>
+              )}
               <p className="mt-2 text-sm whitespace-pre-wrap">
                 {item.description}
               </p>
+              {type === "Project" && item.link && (
+                <p className="text-sm text-blue-500 mt-2">
+                  <a href={item.link} target="_blank" rel="noopener noreferrer">
+                    {item.link}
+                  </a>
+                </p>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -139,87 +157,129 @@ export function EntryForm({ type, entries, onChange }) {
             <CardTitle>Add {type}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Input
-                  placeholder="Title/Position"
-                  {...register("title")}
-                  error={errors.title}
-                />
-                {errors.title && (
-                  <p className="text-sm text-red-500">{errors.title.message}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Input
-                  placeholder="Organization/Company"
-                  {...register("organization")}
-                  error={errors.organization}
-                />
-                {errors.organization && (
-                  <p className="text-sm text-red-500">
-                    {errors.organization.message}
-                  </p>
-                )}
-              </div>
-            </div>
+            {type === "Project" ? (
+              <>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Project Title"
+                    {...register("title")}
+                    error={errors.title}
+                  />
+                  {errors.title && (
+                    <p className="text-sm text-red-500">{errors.title.message}</p>
+                  )}
+                </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Input
-                  type="month"
-                  {...register("startDate")}
-                  error={errors.startDate}
-                />
-                {errors.startDate && (
-                  <p className="text-sm text-red-500">
-                    {errors.startDate.message}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Input
-                  type="month"
-                  {...register("endDate")}
-                  disabled={current}
-                  error={errors.endDate}
-                />
-                {errors.endDate && (
-                  <p className="text-sm text-red-500">
-                    {errors.endDate.message}
-                  </p>
-                )}
-              </div>
-            </div>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Project Link (optional)"
+                    {...register("link")}
+                    error={errors.link}
+                  />
+                  {errors.link && (
+                    <p className="text-sm text-red-500">{errors.link.message}</p>
+                  )}
+                </div>
 
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="current"
-                {...register("current")}
-                onChange={(e) => {
-                  setValue("current", e.target.checked);
-                  if (e.target.checked) {
-                    setValue("endDate", "");
-                  }
-                }}
-              />
-              <label htmlFor="current">Current {type}</label>
-            </div>
+                <div className="space-y-2">
+                  <Textarea
+                    placeholder="Project Description"
+                    className="h-32"
+                    {...register("description")}
+                    error={errors.description}
+                  />
+                  {errors.description && (
+                    <p className="text-sm text-red-500">
+                      {errors.description.message}
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Title/Position"
+                      {...register("title")}
+                      error={errors.title}
+                    />
+                    {errors.title && (
+                      <p className="text-sm text-red-500">{errors.title.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Organization/Company"
+                      {...register("organization")}
+                      error={errors.organization}
+                    />
+                    {errors.organization && (
+                      <p className="text-sm text-red-500">
+                        {errors.organization.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
 
-            <div className="space-y-2">
-              <Textarea
-                placeholder={`Description of your ${type.toLowerCase()}`}
-                className="h-32"
-                {...register("description")}
-                error={errors.description}
-              />
-              {errors.description && (
-                <p className="text-sm text-red-500">
-                  {errors.description.message}
-                </p>
-              )}
-            </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Input
+                      type="month"
+                      {...register("startDate")}
+                      error={errors.startDate}
+                    />
+                    {errors.startDate && (
+                      <p className="text-sm text-red-500">
+                        {errors.startDate.message}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Input
+                      type="month"
+                      {...register("endDate")}
+                      disabled={current}
+                      error={errors.endDate}
+                    />
+                    {errors.endDate && (
+                      <p className="text-sm text-red-500">
+                        {errors.endDate.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="current"
+                    {...register("current")}
+                    onChange={(e) => {
+                      setValue("current", e.target.checked);
+                      if (e.target.checked) {
+                        setValue("endDate", "");
+                      }
+                    }}
+                  />
+                  <label htmlFor="current">Current {type}</label>
+                </div>
+
+                <div className="space-y-2">
+                  <Textarea
+                    placeholder={`Description of your ${type.toLowerCase()}`}
+                    className="h-32"
+                    {...register("description")}
+                    error={errors.description}
+                  />
+                  {errors.description && (
+                    <p className="text-sm text-red-500">
+                      {errors.description.message}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
             <Button
               type="button"
               variant="ghost"
