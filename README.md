@@ -77,8 +77,7 @@ Using Inngest:
 
 ### 1) Clone the repository
 ```bash
-git clone https://github.com/chinmay-yy/ai-career-coach.git
-cd ai-career-coach
+
 ```
 
 ### 2) Install dependencies
@@ -161,15 +160,5 @@ Planned upgrades:
 
 ---
 
-## 👨‍💻 Author
-**Chinmay Saini**  
-CS Engineering Student | Full Stack + AI Builder
-
-GitHub: https://github.com/chinmay-yy
 
 ---
-
-## ⭐ Show Your Support
-If you like this project, **star the repo ⭐**
-
-It helps visibility and makes your GitHub profile stronger for recruiters.

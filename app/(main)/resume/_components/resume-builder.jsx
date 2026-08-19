@@ -221,7 +221,7 @@ export default function ResumeBuilder({ initialContent }) {
             {/* Header */}
             <div className="flex justify-between items-center p-6 border-b">
               <h2 className="text-2xl font-bold text-gray-800">Choose Resume Template</h2>
-              <Button
+              <Button 
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowTemplateSelector(false)}
