@@ -47,7 +47,7 @@ model Resume {
   id          String    @id @default(cuid())
   userId      String    @unique    // One resume per user
   user        User      @relation(fields: [userId], references: [id])
-  content     String    @db.Text // Markdown content
+  content     String    @db.Text // JSON-serialized structured resume data (see resumeSchema)
   atsScore    Float?
   feedback    String?
   createdAt   DateTime  @default(now())

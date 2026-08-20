@@ -3,7 +3,7 @@
 
 AI Career Coach is a **production-grade full-stack SaaS application** that helps users accelerate their job search journey with **AI-generated resumes, cover letters, interview preparation, and career insights**.
 
-Built with **Next.js, Prisma, NeonDB, Clerk, Gemini AI, Inngest, TailwindCSS, and shadcn/ui**, this platform solves real-world career problems using modern AI workflows and scalable architecture.
+Built with **Next.js, Prisma, NeonDB, Clerk, Gemini AI, TailwindCSS, and shadcn/ui**, this platform solves real-world career problems using modern AI workflows and scalable architecture.
 
 ---
 
@@ -48,11 +48,8 @@ Powered by Clerk:
 - user-specific data isolation
 
 ### ⚙️ Background AI Workflows
-Using Inngest:
-- async AI generation
-- workflow orchestration
-- event-driven processing
-- scalable background jobs
+A weekly Vercel Cron job (`/api/cron/refresh-insights`) refreshes every
+industry's AI-generated insights on a schedule.
 
 ---
 
@@ -67,17 +64,17 @@ Using Inngest:
 | ORM | Prisma |
 | Authentication | Clerk |
 | AI | Google Gemini |
-| Background Jobs | Inngest |
+| Background Jobs | Vercel Cron |
 | Deployment | Vercel |
 
 ---
-
 
 ## ⚡ Local Setup
 
 ### 1) Clone the repository
 ```bash
-
+git clone https://github.com/chinmay-yy/ai-career-coach.git
+cd ai-career-coach
 ```
 
 ### 2) Install dependencies
@@ -100,7 +97,13 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/onboarding
 NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/onboarding
 
 GEMINI_API_KEY=
+
+CRON_SECRET=
 ```
+
+`CRON_SECRET` protects the weekly insights-refresh route — Vercel Cron sends
+it automatically in production; for local testing, call the route with
+`Authorization: Bearer <your CRON_SECRET>`.
 
 ### 4) Run database migration
 ```bash
@@ -111,7 +114,6 @@ npx prisma migrate dev
 ```bash
 npm run dev
 ```
-
 
 ---
 
@@ -160,5 +162,15 @@ Planned upgrades:
 
 ---
 
+## 👨‍💻 Author
+**Chinmay Saini**
+CS Engineering Student | Full Stack + AI Builder
+
+GitHub: [https://github.com/chinmay-yy](https://github.com/chinmay-yy)
 
 ---
+
+## ⭐ Show Your Support
+If you like this project, star the repo ⭐
+
+It helps visibility and makes your GitHub profile stronger for recruiters.

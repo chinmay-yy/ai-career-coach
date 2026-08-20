@@ -2,13 +2,7 @@
 
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel(
-  { model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
-  { apiVersion: "v1" },
-);
+import { model, parseJsonResponse } from "@/lib/gemini";
 
 export async function generateQuiz() {
   const { userId } = await auth();
@@ -48,10 +42,7 @@ export async function generateQuiz() {
 
   try {
     const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
-    const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
-    const quiz = JSON.parse(cleanedText);
+    const quiz = parseJsonResponse(result.response.text());
 
     return quiz.questions;
   } catch (error) {

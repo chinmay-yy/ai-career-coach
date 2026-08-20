@@ -1,16 +1,26 @@
-// Helper function to convert entries to markdown
-export function entriesToMarkdown(entries, type) {
-  if (!entries?.length) return "";
+// Combine an industry id and a specialization name into the slug stored on User.industry
+export function toIndustrySlug(industryId, subIndustryName) {
+  return `${industryId}-${subIndustryName.toLowerCase().replace(/ /g, "-")}`;
+}
 
-  return (
-    `## ${type}\n\n` +
-    entries
-      .map((entry) => {
-        const dateRange = entry.current
-          ? `${entry.startDate} - Present`
-          : `${entry.startDate} - ${entry.endDate}`;
-        return `### ${entry.title} @ ${entry.organization}\n${dateRange}\n\n${entry.description}`;
-      })
-      .join("\n\n")
+// Reverse toIndustrySlug against the industries list to recover the industry + specialization
+export function fromIndustrySlug(slug, industries) {
+  const industry = industries.find((ind) => slug?.startsWith(`${ind.id}-`));
+  if (!industry) return { industryId: null, subIndustryName: null };
+
+  const rest = slug.slice(industry.id.length + 1);
+  const subIndustryName = industry.subIndustries.find(
+    (sub) => sub.toLowerCase().replace(/ /g, "-") === rest
   );
+
+  return { industryId: industry.id, subIndustryName: subIndustryName ?? null };
+}
+
+// Turn a free-typed industry/specialization term into a URL-safe, DB-safe key
+export function slugify(text) {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-+|-+$)/g, "");
 }

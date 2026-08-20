@@ -2,13 +2,9 @@
 
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel(
-  { model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
-  { apiVersion: "v1" },
-);
+import { model, parseJsonResponse } from "@/lib/gemini";
+import { industries } from "@/data/industries";
+import { toIndustrySlug, slugify } from "@/app/lib/helper";
 
 export const generateAIInsights = async (industry) => {
   const prompt = `
@@ -24,7 +20,7 @@ export const generateAIInsights = async (industry) => {
             "keyTrends": ["trend1", "trend2"],
             "recommendedSkills": ["skill1", "skill2"]
           }
-          
+
           IMPORTANT: Return ONLY the JSON. No additional text, notes, or markdown formatting.
           Include at least 5 common roles for salary ranges.
           Growth rate should be a percentage.
@@ -32,12 +28,48 @@ export const generateAIInsights = async (industry) => {
         `;
 
   const result = await model.generateContent(prompt);
-  const response = result.response;
-  const text = response.text();
-  const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
-
-  return JSON.parse(cleanedText);
+  return parseJsonResponse(result.response.text());
 };
+
+async function findOrCreateIndustryInsight(industry, promptTerm = industry) {
+  const existing = await db.industryInsight.findUnique({
+    where: { industry },
+  });
+
+  if (existing) return existing;
+
+  const insights = await generateAIInsights(promptTerm);
+
+  return db.industryInsight.create({
+    data: {
+      industry,
+      ...insights,
+      nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+}
+
+function isKnownIndustrySlug(slug) {
+  return industries.some((ind) =>
+    ind.subIndustries.some((sub) => toIndustrySlug(ind.id, sub) === slug)
+  );
+}
+
+async function isIndustryTermAllowed(term) {
+  const prompt = `You are a content moderator for a professional career-insights platform.
+A user wants to view career/industry insights for: "${term}"
+
+Reply with exactly one word:
+- ALLOW if this describes a legitimate, legal, and professionally/ethically acceptable industry, occupation, or business sector.
+- BLOCK if it describes or promotes illegal activity (e.g. drug trafficking, weapons trafficking, human trafficking, fraud, hacking/cybercrime, terrorism) or is otherwise unethical, hateful, sexually explicit, or not a real industry/occupation.
+
+Reply with ONLY "ALLOW" or "BLOCK".`;
+
+  const result = await model.generateContent(prompt);
+  const answer = result.response.text().trim().toUpperCase();
+
+  return answer.startsWith("ALLOW");
+}
 
 export async function getIndustryInsights() {
   const { userId } = await auth();
@@ -45,27 +77,47 @@ export async function getIndustryInsights() {
 
   const user = await db.user.findUnique({
     where: { clerkUserId: userId },
-    include: {
-      industryInsight: true,
-    },
   });
 
   if (!user) throw new Error("User not found");
 
-  // If no insights exist, generate them
-  if (!user.industryInsight) {
-    const insights = await generateAIInsights(user.industry);
+  return findOrCreateIndustryInsight(user.industry);
+}
 
-    const industryInsight = await db.industryInsight.create({
-      data: {
-        industry: user.industry,
-        ...insights,
-        nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    });
+// Lets a signed-in user preview any catalog industry's insights without changing their saved industry
+export async function getIndustryInsightsByIndustry(industry) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
 
-    return industryInsight;
+  if (!isKnownIndustrySlug(industry)) {
+    throw new Error("Invalid industry selection");
   }
 
-  return user.industryInsight;
+  return findOrCreateIndustryInsight(industry);
+}
+
+// Lets a signed-in user search for an industry/specialization that isn't in the catalog,
+// moderated so illegal/unethical terms are rejected before hitting Gemini or the database
+export async function getCustomIndustryInsights(term) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const cleaned = term?.trim();
+  if (!cleaned || cleaned.length < 2 || cleaned.length > 60) {
+    throw new Error("Please enter a valid industry or specialization name.");
+  }
+
+  const allowed = await isIndustryTermAllowed(cleaned);
+  if (!allowed) {
+    throw new Error(
+      "That doesn't look like a supported industry. Please try a different term."
+    );
+  }
+
+  const slug = slugify(cleaned);
+  if (!slug) {
+    throw new Error("Please enter a valid industry or specialization name.");
+  }
+
+  return findOrCreateIndustryInsight(slug, cleaned);
 }

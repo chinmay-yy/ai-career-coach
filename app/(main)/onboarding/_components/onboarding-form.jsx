@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import useFetch from "@/hooks/use-fetch";
 import { onboardingSchema } from "@/app/lib/schema";
+import { toIndustrySlug } from "@/app/lib/helper";
 import { updateUser } from "@/actions/user";
 
 const OnboardingForm = ({ industries }) => {
@@ -52,9 +53,10 @@ const OnboardingForm = ({ industries }) => {
 
   const onSubmit = async (values) => {
     try {
-      const formattedIndustry = `${values.industry}-${values.subIndustry
-        .toLowerCase()
-        .replace(/ /g, "-")}`;
+      const formattedIndustry = toIndustrySlug(
+        values.industry,
+        values.subIndustry
+      );
 
       await updateUserFn({
         ...values,

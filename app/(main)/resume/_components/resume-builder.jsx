@@ -1,58 +1,74 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  AlertTriangle,
-  Download,
-  Edit,
-  Loader2,
-  Monitor,
-  Save,
-  FileText,
-  X,
-} from "lucide-react";
+import { Download, Loader2, Save, Target, Upload } from "lucide-react";
 import { toast } from "sonner";
-import MDEditor from "@uiw/react-md-editor";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { saveResume } from "@/actions/resume";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { saveResume, parseResumeFile } from "@/actions/resume";
 import { EntryForm } from "./entry-form";
+import { JobDescriptionTools } from "./job-description-tools";
+import ResumePreview from "./resume-preview";
 import useFetch from "@/hooks/use-fetch";
 import { useUser } from "@clerk/nextjs";
-import { entriesToMarkdown } from "@/app/lib/helper";
 import { resumeSchema } from "@/app/lib/schema";
 import { RESUME_TEMPLATES } from "./resume-templates";
 
-export default function ResumeBuilder({ initialContent }) {
-  const [activeTab, setActiveTab] = useState("edit");
-  const [previewContent, setPreviewContent] = useState(initialContent);
+const EMPTY_RESUME = {
+  contactInfo: {},
+  summary: "",
+  skills: "",
+  experience: [],
+  education: [],
+  projects: [],
+};
+
+function parseInitialResume(content) {
+  if (!content) return null;
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null; // pre-rewrite resumes were stored as markdown; start fresh
+  }
+}
+
+export default function ResumeBuilder({ initialResume }) {
+  const initialData = parseInitialResume(initialResume?.content);
   const { user } = useUser();
-  const [resumeMode, setResumeMode] = useState("preview");
-  const [selectedTemplate, setSelectedTemplate] = useState("professional");
-  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
-  const [previewTemplateKey, setPreviewTemplateKey] = useState("professional");
+
+  const [activeTab, setActiveTab] = useState(initialData ? "preview" : "edit");
+  const [selectedTemplate, setSelectedTemplate] = useState("classic");
+  const [showJdTools, setShowJdTools] = useState(false);
+  const [atsScore, setAtsScore] = useState(initialResume?.atsScore ?? null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const fileInputRef = useRef(null);
 
   const {
     control,
     register,
     handleSubmit,
     watch,
+    reset,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(resumeSchema),
-    defaultValues: {
-      contactInfo: {},
-      summary: "",
-      skills: "",
-      experience: [],
-      education: [],
-      projects: [],
-    },
+    defaultValues: initialData || EMPTY_RESUME,
   });
+
+  const formValues = watch();
+  const design = RESUME_TEMPLATES[selectedTemplate];
 
   const {
     loading: isSaving,
@@ -61,90 +77,68 @@ export default function ResumeBuilder({ initialContent }) {
     error: saveError,
   } = useFetch(saveResume);
 
-  // Watch form fields for preview updates
-  const formValues = watch();
+  const {
+    loading: isParsingResume,
+    fn: parseResumeFileFn,
+    data: parsedResume,
+    error: parseResumeError,
+  } = useFetch(parseResumeFile);
 
   useEffect(() => {
-    if (initialContent) setActiveTab("preview");
-  }, [initialContent]);
-
-  // Update preview content when form values change
-  useEffect(() => {
-    if (activeTab === "edit") {
-      const newContent = getCombinedContent();
-      setPreviewContent(newContent ? newContent : initialContent);
-    }
-  }, [formValues, activeTab]);
-
-  // Handle save result
-  useEffect(() => {
-    if (saveResult && !isSaving) {
-      toast.success("Resume saved successfully!");
-    }
-    if (saveError) {
-      toast.error(saveError.message || "Failed to save resume");
-    }
+    if (saveResult && !isSaving) toast.success("Resume saved successfully!");
+    if (saveError) toast.error(saveError.message || "Failed to save resume");
   }, [saveResult, saveError, isSaving]);
 
-  const getContactMarkdown = () => {
-    const { contactInfo } = formValues;
-    const parts = [];
-    if (contactInfo.email) parts.push(`📧 ${contactInfo.email}`);
-    if (contactInfo.mobile) parts.push(`📱 ${contactInfo.mobile}`);
-    if (contactInfo.linkedin)
-      parts.push(`💼 [LinkedIn](${contactInfo.linkedin})`);
-    if (contactInfo.twitter) parts.push(`🐦 [Twitter](${contactInfo.twitter})`);
-
-    return parts.length > 0
-      ? `## <div align="center">${user.fullName}</div>
-        \n\n<div align="center">\n\n${parts.join(" | ")}\n\n</div>`
-      : "";
-  };
-
-  const getCombinedContent = () => {
-    const { summary, skills, experience, education, projects } = formValues;
-    return [
-      getContactMarkdown(),
-      summary && `## Professional Summary\n\n${summary}`,
-      skills && `## Skills\n\n${skills}`,
-      entriesToMarkdown(experience, "Work Experience"),
-      entriesToMarkdown(education, "Education"),
-      entriesToMarkdown(projects, "Projects"),
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-  };
-
-  const applyTemplate = (templateKey) => {
-    const template = RESUME_TEMPLATES[templateKey];
-    if (template) {
-      const formattedContent = template.formatter({
-        ...formValues,
-        user,
-      });
-      setPreviewContent(formattedContent);
-      setSelectedTemplate(templateKey);
-      setShowTemplateSelector(false);
-      toast.success(`Template "${template.name}" applied!`);
+  useEffect(() => {
+    if (parsedResume) {
+      reset(parsedResume);
+      setActiveTab("edit");
+      toast.success("Resume uploaded — review the auto-filled fields below");
     }
-  };
+    if (parseResumeError) {
+      toast.error(parseResumeError.message || "Failed to read that resume");
+    }
+  }, [parsedResume, parseResumeError]);
 
-  const [isGenerating, setIsGenerating] = useState(false);
+  const handleUploadClick = () => fileInputRef.current?.click();
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File is too large (max 5MB)");
+      return;
+    }
+
+    const hasExistingContent = formValues.summary || formValues.experience?.length > 0;
+    if (hasExistingContent && !window.confirm("This will replace your current form data. Continue?")) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    await parseResumeFileFn(formData);
+  };
 
   const generatePDF = async () => {
     setIsGenerating(true);
     try {
-      const html2pdf = (await import("html2pdf.js/dist/html2pdf.min.js")).default;
-      const element = document.getElementById("resume-pdf");
-      const opt = {
-        margin: [15, 15],
-        filename: "resume.pdf",
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      };
+      const [{ pdf }, { ResumePdfDocument }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("./resume-pdf-document"),
+      ]);
+      const blob = await pdf(
+        <ResumePdfDocument data={formValues} fullName={user?.fullName} design={design} />
+      ).toBlob();
 
-      await html2pdf().set(opt).from(element).save();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "resume.pdf";
+      link.click();
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error("PDF generation error:", error);
       toast.error("Failed to generate PDF");
@@ -154,39 +148,64 @@ export default function ResumeBuilder({ initialContent }) {
   };
 
   const onSubmit = async (data) => {
-    try {
-      const formattedContent = previewContent
-        .replace(/\n/g, "\n") // Normalize newlines
-        .replace(/\n\s*\n/g, "\n\n") // Normalize multiple newlines to double newlines
-        .trim();
-
-      console.log(previewContent, formattedContent);
-      await saveResumeFn(previewContent);
-    } catch (error) {
-      console.error("Save error:", error);
-    }
+    await saveResumeFn(JSON.stringify(data));
   };
 
   return (
-    <div data-color-mode="light" className="space-y-4">
+    <div className="space-y-4">
       <div className="flex flex-col md:flex-row justify-between items-center gap-2">
-        <h1 className="font-bold gradient-title text-5xl md:text-6xl">
-          Resume Builder
-        </h1>
-        <div className="space-x-2">
-          <Button
-            variant="outline"
-            onClick={() => setShowTemplateSelector(!showTemplateSelector)}
-            className="hidden sm:inline-flex"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Templates
+        <div>
+          <h1 className="font-bold gradient-title text-5xl md:text-6xl">
+            Resume Builder
+          </h1>
+          {atsScore != null && (
+            <Badge variant="outline" className="mt-1">
+              AI-estimated ATS score: {atsScore}/100
+            </Badge>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 justify-end items-center">
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".pdf,.txt,.md"
+            hidden
+            onChange={handleFileSelected}
+          />
+          <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(RESUME_TEMPLATES).map(([key, t]) => (
+                <SelectItem key={key} value={key}>
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full mr-2"
+                    style={{ backgroundColor: t.accent }}
+                  />
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={handleUploadClick} disabled={isParsingResume}>
+            {isParsingResume ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Reading...
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Resume
+              </>
+            )}
           </Button>
-          <Button
-            variant="destructive"
-            onClick={handleSubmit(onSubmit)}
-            disabled={isSaving}
-          >
+          <Button variant="outline" onClick={() => setShowJdTools(true)}>
+            <Target className="h-4 w-4 mr-2" />
+            Target a Job
+          </Button>
+          <Button variant="destructive" onClick={handleSubmit(onSubmit)} disabled={isSaving}>
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -215,100 +234,21 @@ export default function ResumeBuilder({ initialContent }) {
         </div>
       </div>
 
-      {showTemplateSelector && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold text-gray-800">Choose Resume Template</h2>
-              <Button 
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowTemplateSelector(false)}
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-auto flex">
-              {/* Preview Section */}
-              <div
-                className="flex-1 border-r p-6 overflow-auto"
-                data-color-mode="light"
-              >
-                <div className="mb-4">
-                  <h3 className="font-semibold text-lg mb-2 text-gray-800">
-                    {RESUME_TEMPLATES[previewTemplateKey].name} Preview
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {RESUME_TEMPLATES[previewTemplateKey].description}
-                  </p>
-                </div>
-                <div className="border rounded-lg bg-gray-50 text-gray-800 p-4">
-                  <MDEditor.Markdown
-                    source={RESUME_TEMPLATES[previewTemplateKey].preview}
-                    style={{
-                      backgroundColor: "white",
-                      padding: "20px",
-                      borderRadius: "8px",
-                      fontSize: "14px",
-                      lineHeight: "1.6",
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Template Selection */}
-              <div className="w-80 p-6 overflow-auto bg-gradient-to-b text-gray-800 from-blue-50 to-indigo-50">
-                <h3 className="font-semibold mb-4">Available Templates</h3>
-                <div className="space-y-3">
-                  {Object.entries(RESUME_TEMPLATES).map(([key, template]) => (
-                    <div
-                      key={key}
-                      onClick={() => setPreviewTemplateKey(key)}
-                      className={`p-4 rounded-lg cursor-pointer transition-all border-2 ${
-                        previewTemplateKey === key
-                          ? "border-blue-500 bg-blue-100 shadow-md"
-                          : "border-gray-200 bg-white hover:border-blue-300"
-                      }`}
-                    >
-                      <div className="font-semibold text-sm text-gray-800 mb-1">
-                        {template.name}
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        {template.description}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex justify-end gap-2 p-6 border-t bg-gray-50">
-              <Button
-                variant="outline"
-                onClick={() => setShowTemplateSelector(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  applyTemplate(previewTemplateKey);
-                }}
-              >
-                Apply {RESUME_TEMPLATES[previewTemplateKey].name} Template
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <JobDescriptionTools
+        open={showJdTools}
+        onOpenChange={setShowJdTools}
+        resumeData={formValues}
+        onScoreUpdate={(score) => setAtsScore(score)}
+        onApplyTailoredResume={(tailoredData) => {
+          reset(tailoredData);
+          setActiveTab("preview");
+        }}
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="edit">Form</TabsTrigger>
-          <TabsTrigger value="preview">Markdown</TabsTrigger>
+          <TabsTrigger value="preview">Preview</TabsTrigger>
         </TabsList>
 
         <TabsContent value="edit">
@@ -481,56 +421,7 @@ export default function ResumeBuilder({ initialContent }) {
         </TabsContent>
 
         <TabsContent value="preview">
-          {activeTab === "preview" && (
-            <Button
-              variant="link"
-              type="button"
-              className="mb-2"
-              onClick={() =>
-                setResumeMode(resumeMode === "preview" ? "edit" : "preview")
-              }
-            >
-              {resumeMode === "preview" ? (
-                <>
-                  <Edit className="h-4 w-4" />
-                  Edit Resume
-                </>
-              ) : (
-                <>
-                  <Monitor className="h-4 w-4" />
-                  Show Preview
-                </>
-              )}
-            </Button>
-          )}
-
-          {activeTab === "preview" && resumeMode !== "preview" && (
-            <div className="flex p-3 gap-2 items-center border-2 border-yellow-600 text-yellow-600 rounded mb-2">
-              <AlertTriangle className="h-5 w-5" />
-              <span className="text-sm">
-                You will lose editied markdown if you update the form data.
-              </span>
-            </div>
-          )}
-          <div className="border rounded-lg">
-            <MDEditor
-              value={previewContent}
-              onChange={setPreviewContent}
-              height={800}
-              preview={resumeMode}
-            />
-          </div>
-          <div className="hidden">
-            <div id="resume-pdf">
-              <MDEditor.Markdown
-                source={previewContent}
-                style={{
-                  background: "white",
-                  color: "black",
-                }}
-              />
-            </div>
-          </div>
+          <ResumePreview data={formValues} fullName={user?.fullName} design={design} />
         </TabsContent>
       </Tabs>
     </div>
